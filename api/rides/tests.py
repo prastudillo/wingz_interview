@@ -3,6 +3,8 @@ from django.utils import timezone
 from datetime import timedelta
 from rest_framework.test import APITestCase
 from rest_framework import status
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 
 from .models import User, Ride, RideEvent
 
@@ -28,7 +30,8 @@ class RideListAPITests(APITestCase):
 
         now = timezone.now()
 
-        # Ride 1 with two ride events: one within the last 24 hours and one older than 24 hours.
+        # Create Ride 1 with two ride events:
+        # one within the last 24 hours and one older than 24 hours.
         self.ride1 = Ride.objects.create(
             status='pickup',
             rider=self.non_admin_user,
@@ -52,7 +55,7 @@ class RideListAPITests(APITestCase):
             created_at=now - timedelta(days=2)
         )
 
-        # Ride 2 with one ride event within 24 hours.
+        # Create Ride 2 with one ride event within 24 hours.
         self.ride2 = Ride.objects.create(
             status='en-route',
             rider=self.non_admin_user,
@@ -82,3 +85,72 @@ class RideListAPITests(APITestCase):
         self.client.force_authenticate(user=self.non_admin_user)
         response = self.client.get(self.list_url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_list_rides(self):
+        """Test that the API returns rides with the correct structure and filtering of ride events."""
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertIn('results', data)
+        self.assertEqual(len(data['results']), 2)
+
+        # Verify that for ride1, only events within the last 24 hours are returned
+        for ride in data['results']:
+            if ride['id_ride'] == self.ride1.id_ride:
+                self.assertEqual(len(ride['todays_ride_events']), 1)
+            elif ride['id_ride'] == self.ride2.id_ride:
+                self.assertEqual(len(ride['todays_ride_events']), 1)
+
+    def test_filtering_by_status_and_rider_email(self):
+        """Test filtering rides by status and rider email."""
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.get(self.list_url, {'status': 'pickup'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertEqual(len(data['results']), 1)
+        self.assertEqual(data['results'][0]['status'], 'pickup')
+
+        response = self.client.get(self.list_url, {'rider__email': self.non_admin_user.email})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertEqual(len(data['results']), 2)
+
+    def test_sorting_by_pickup_time(self):
+        """Test ordering of rides by pickup_time in ascending order."""
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.get(self.list_url, {'ordering': 'pickup_time'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rides = response.json()['results']
+        pickup_times = [ride['pickup_time'] for ride in rides]
+        self.assertEqual(pickup_times, sorted(pickup_times))
+
+    def test_sorting_by_distance(self):
+        """Test that rides are sorted by computed distance when latitude and longitude are provided."""
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.get(self.list_url, {
+            'ordering': 'distance',
+            'latitude': '0',
+            'longitude': '0'
+        })
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rides = response.json()['results']
+        self.assertEqual(rides[0]['id_ride'], self.ride1.id_ride)
+
+    def test_pagination_structure(self):
+        """Test that pagination keys are present in the response."""
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertIn('count', data)
+        self.assertIn('next', data)
+        self.assertIn('previous', data)
+
+    def test_minimal_query_count(self):
+        """Ensure that the number of DB queries is minimized (expect 2 or 3 queries, including pagination count)."""
+        self.client.force_authenticate(user=self.admin_user)
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(self.list_url)
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertLessEqual(len(queries), 3, msg=f"Too many queries executed: {len(queries)}")
