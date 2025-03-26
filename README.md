@@ -1,2 +1,3 @@
-# wingz_interview
-wingz_interview
+# Setup instructions
+
+# Bonus: SQL Statement
