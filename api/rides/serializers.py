@@ -1,18 +1,21 @@
-from rest_framework import serializers
-from django.utils import timezone
 from datetime import timedelta
-from .models import Ride, User, RideEvent
+
+from django.utils import timezone
+from rest_framework import serializers
+
+from .models import Ride, RideEvent, User
+
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'first_name', 'last_name', 'email', 'phone_number', 'role']
+        fields = ["id", "first_name", "last_name", "email", "phone_number", "role"]
 
 
 class RideEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = RideEvent
-        fields = ['id_ride_event', 'description', 'created_at']
+        fields = ["id_ride_event", "description", "created_at"]
 
 
 class RideSerializer(serializers.ModelSerializer):
@@ -23,14 +26,20 @@ class RideSerializer(serializers.ModelSerializer):
     class Meta:
         model = Ride
         fields = [
-            'id_ride', 'status', 'rider', 'driver',
-            'pickup_latitude', 'pickup_longitude',
-            'dropoff_latitude', 'dropoff_longitude',
-            'pickup_time', 'todays_ride_events'
+            "id_ride",
+            "status",
+            "rider",
+            "driver",
+            "pickup_latitude",
+            "pickup_longitude",
+            "dropoff_latitude",
+            "dropoff_longitude",
+            "pickup_time",
+            "todays_ride_events",
         ]
 
     def get_todays_ride_events(self, obj):
-        if hasattr(obj, 'todays_events'):
+        if hasattr(obj, "todays_events"):
             return RideEventSerializer(obj.todays_events, many=True).data
         last_24_hours = timezone.now() - timedelta(days=1)
         events = obj.ride_events.filter(created_at__gte=last_24_hours)
