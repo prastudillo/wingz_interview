@@ -7,8 +7,9 @@
    ```
    *(Adjust the above commands for your OS if necessary.)*
 
-2. **Install Dependencies**
+2. **Go to /api and Install Dependencies**
    ```bash
+   cd /api
    pip3 install -r requirements.txt
    ```
 
