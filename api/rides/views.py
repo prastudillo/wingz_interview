@@ -7,9 +7,9 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, viewsets
 from rest_framework.authentication import BasicAuthentication
 
-from .models import Ride, RideEvent
+from .models import Ride, RideEvent, User
 from .permissions import IsAdmin
-from .serializers import RideSerializer
+from .serializers import RideSerializer, RideEventSerializer, UserSerializer
 
 
 class RideViewSet(viewsets.ModelViewSet):
@@ -27,7 +27,6 @@ class RideViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset().select_related("rider", "driver")
-
         # Prefetch ride events from the last 24 hours.
         last_24_hours = timezone.now() - timedelta(days=1)
         qs = qs.prefetch_related(
@@ -62,3 +61,31 @@ class RideViewSet(viewsets.ModelViewSet):
                     qs = qs.order_by("distance")
 
         return qs
+
+
+class RideEventViewSet(viewsets.ModelViewSet):
+    """
+    Viewset for listing, retrieving, and modifying RideEvents.
+    """
+
+    queryset = RideEvent.objects.all()
+    serializer_class = RideEventSerializer
+    permission_classes = [IsAdmin]
+    authentication_classes = [BasicAuthentication]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ["ride__id_ride", "description"]
+    ordering_fields = ["created_at"]
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    """
+    Viewset for listing, retrieving, and modifying Users.
+    """
+
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = [IsAdmin]
+    authentication_classes = [BasicAuthentication]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ["username", "email", "role"]
+    ordering_fields = ["first_name", "last_name", "email"]
